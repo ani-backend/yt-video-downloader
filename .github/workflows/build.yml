@@ -1,0 +1,38 @@
+name: Build Python Application
+
+on:
+  push:
+    branches: [ "main" ] # Trigger on pushes to the main branch
+  pull_request:
+    branches: [ "main" ] # Optional: Trigger on pull requests to main
+
+jobs:
+  build-windows:
+    runs-on: windows-latest # Specify the runner OS
+
+    steps:
+    - name: Check out repository code
+      uses: actions/checkout@v4 # Action to get your code
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11' # Match your project's required Python version
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pytubefix pyinstaller
+        # If you have many dependencies, consider using a requirements.txt
+        # pip install -r requirements.txt
+
+    - name: Run PyInstaller
+      run: |
+        pyinstaller --onefile --windowed --add-data "config.json;." app.py
+        # Note the semicolon ';' in --add-data for Windows
+
+    - name: Upload Windows Executable Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: yt-downloader-pro-windows # Name of the artifact zip file
+        path: dist/app.exe # Path to the file to upload (adjust if PyInstaller names it differently)
