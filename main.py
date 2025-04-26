@@ -20,8 +20,12 @@ def download_video(url):
         # Get video information
         title = yt.title
 
-        stream = yt.streams.filter(progressive=True, file_extension='mp4').order_by('resolution').desc().first()
+        stream = yt.streams.filter(adaptive=True, file_extension='mp4', type='video').order_by('resolution').desc().first()
         
+        if not stream:
+            # Second attempt: Try progressive streams (has both video and audio but lower quality)
+            stream = yt.streams.filter(progressive=True, file_extension='mp4').order_by('resolution').desc().first()
+            
         if not stream:
             # Last resort: Any video stream available
             stream = yt.streams.filter(file_extension='mp4').order_by('resolution').desc().first()
@@ -56,6 +60,7 @@ def cleanup_video(file_path):
     return False
 
 st.title('YouTube Video Downloader')
+st.write("Version: 1.0")
 st.write("Enter a YouTube URL and press Enter or click the Download button")
 
 url = st.text_input('Enter YouTube URL:')
