@@ -61,39 +61,25 @@ st.write("Enter a YouTube URL and press Enter or click the Download button")
 url = st.text_input('Enter YouTube URL:')
 
 # Add a download button
-download_clicked = st.button('Download Video')
+download_clicked = st.button('Get Video')
 
 # No session state needed for the simplified download process
 
 # Process the URL when entered or button clicked
 if url and download_clicked:
     try:
-        with st.spinner('Downloading video... This may take a while depending on the video size'):
+        with st.spinner('Fetching video... This may take a while depending on the video size'):
             file_path, file_name = download_video(url)
             
         if file_path and os.path.exists(file_path):
-            # Automatically trigger file download
-            with open(file_path, 'rb') as f:
-                st.download_button(
-                    label='Download Video',
-                    data=f,
-                    file_name=file_name,
-                    mime='video/mp4',
-                    key='auto_download'
-                )
-                st.info('If the download does not start, please click the button above to download your video.')
-                # Use JavaScript to auto-click the download button
-                st.markdown(
-                    """
-                    <script>
-                        document.querySelector('[data-testid="stDownloadButton-auto_download"]').click();
-                    </script>
-                    """, 
-                    unsafe_allow_html=True
-                )
+            # Store download data in session state
+            st.session_state.download_ready = True
+            st.session_state.file_data = open(file_path, 'rb').read()
+            st.session_state.file_name = file_name
             
-            # Clean up the file after a delay
-            st.success('Video downloaded successfully!')
+            # Display success message first
+            st.success('Video fetched successfully! Click the download button below.')
+            
             # Schedule cleanup for next session
             if not os.path.exists('cleanup_list.txt'):
                 with open('cleanup_list.txt', 'w') as f:
@@ -105,6 +91,16 @@ if url and download_clicked:
             st.error('Failed to download the video. File not found.')
     except Exception as e:
         st.error(f'Error: {str(e)}')
+
+# Display download button if ready
+if st.session_state.get('download_ready'):
+    st.download_button(
+        label='Save Video',
+        data=st.session_state.file_data,
+        file_name=st.session_state.file_name,
+        mime='video/mp4',
+        key='persistent_download'
+    )
 
 # Check for files that need cleanup from previous sessions
 if os.path.exists('cleanup_list.txt'):
