@@ -127,7 +127,12 @@ if st.session_state.streams:
     
     if len(stream_list) > 0:
         sorted_streams = sorted(stream_list, 
-                              key=lambda s: int(s.resolution[:-1]) if s.resolution else int(s.abr[:-4]), 
+                              key=lambda s: (
+                                  int(s.resolution[:-1]) 
+                                  if s.resolution and s.resolution.endswith('p') 
+                                  else int(s.abr[:-4]) if s.abr and s.abr.endswith('kbps') 
+                                  else 0
+                              ), 
                               reverse=True)
         
         selected = st.selectbox(
