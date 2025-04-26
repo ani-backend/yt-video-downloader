@@ -59,43 +59,139 @@ def cleanup_video(file_path):
         return False
     return False
 
-st.title('YouTube Video Downloader')
-st.write("Version: 1.0")
-st.write("Enter a YouTube URL and press Enter or click the Download button")
+def get_available_streams(url):
+    """Get all available streams categorized by type"""
+    ssl._create_default_https_context = ssl._create_unverified_context
+    yt = YouTube(url)
+    
+    streams = {
+        'video': [],
+        'audio': [],
+        'progressive': []
+    }
+    
+    for stream in yt.streams:
+        if stream.type == 'video' and stream.audio_codec is None:
+            streams['video'].append(stream)
+        elif stream.type == 'audio':
+            streams['audio'].append(stream)
+        elif stream.type == 'video' and stream.audio_codec:
+            streams['progressive'].append(stream)
+    
+    return streams, yt.title
 
+def download_selected_stream(stream, title):
+    """Download the selected stream"""
+    unique_id = str(uuid.uuid4())[:8]
+    safe_title = "".join([c if c.isalnum() else "_" for c in title])
+    filename = f"{safe_title}_{unique_id}.{stream.subtype}"
+    file_path = os.path.join(DOWNLOAD_FOLDER, filename)
+    
+    stream.download(output_path=DOWNLOAD_FOLDER, filename=filename)
+    return file_path, filename
+
+st.title('YouTube Video Downloader')
+st.write("Version: 2.0")
 url = st.text_input('Enter YouTube URL:')
 
+if 'streams' not in st.session_state:
+    st.session_state.streams = None
+
+if st.button('Show Available Formats'):
+    if url:
+        try:
+            with st.spinner('Fetching available formats...'):
+                streams, title = get_available_streams(url)
+                st.session_state.streams = streams
+                st.session_state.video_title = title
+                st.success("Found available formats!")
+        except Exception as e:
+            st.error(f"Error: {str(e)}")
+    else:
+        st.warning("Please enter a YouTube URL first")
+
+if st.session_state.streams:
+    st.subheader("Available Formats")
+    
+    format_type = st.radio("Select format type:", 
+                         ['Progressive (Video+Audio)', 'Video Only', 'Audio Only'],
+                         index=0)
+    
+    stream_list = []
+    if format_type == 'Progressive (Video+Audio)':
+        stream_list = st.session_state.streams['progressive']
+    elif format_type == 'Video Only':
+        stream_list = st.session_state.streams['video']
+    elif format_type == 'Audio Only':
+        stream_list = st.session_state.streams['audio']
+    
+    if len(stream_list) > 0:
+        sorted_streams = sorted(stream_list, 
+                              key=lambda s: int(s.resolution[:-1]) if s.resolution else int(s.abr[:-4]), 
+                              reverse=True)
+        
+        selected = st.selectbox(
+            "Select quality:",
+            options=[f"{s.resolution or s.abr} ({s.mime_type})" for s in sorted_streams],
+            index=0
+        )
+        
+        selected_stream = sorted_streams[[f"{s.resolution or s.abr} ({s.mime_type})" for s in sorted_streams].index(selected)]
+        
+        if st.button('Download Selected Format'):
+            try:
+                with st.spinner('Downloading...'):
+                    file_path, file_name = download_selected_stream(selected_stream, st.session_state.video_title)
+                
+                if file_path and os.path.exists(file_path):
+                    st.session_state.download_ready = True
+                    st.session_state.file_data = open(file_path, 'rb').read()
+                    st.session_state.file_name = file_name
+                    st.success('Download ready! Click the save button below.')
+                    
+                    # Schedule cleanup for next session
+                    if not os.path.exists('cleanup_list.txt'):
+                        with open('cleanup_list.txt', 'w') as f:
+                            f.write(file_path + '\n')
+                    else:
+                        with open('cleanup_list.txt', 'a') as f:
+                            f.write(file_path + '\n')
+            except Exception as e:
+                st.error(f'Error: {str(e)}')
+    else:
+        st.warning("No streams available in this category")
+
 # Add a download button
-download_clicked = st.button('Get Video')
+# download_clicked = st.button('Get Video')
 
 # No session state needed for the simplified download process
 
 # Process the URL when entered or button clicked
-if url and download_clicked:
-    try:
-        with st.spinner('Fetching video... This may take a while depending on the video size'):
-            file_path, file_name = download_video(url)
+# if url and download_clicked:
+#     try:
+#         with st.spinner('Fetching video... This may take a while depending on the video size'):
+#             file_path, file_name = download_video(url)
             
-        if file_path and os.path.exists(file_path):
-            # Store download data in session state
-            st.session_state.download_ready = True
-            st.session_state.file_data = open(file_path, 'rb').read()
-            st.session_state.file_name = file_name
+#         if file_path and os.path.exists(file_path):
+#             # Store download data in session state
+#             st.session_state.download_ready = True
+#             st.session_state.file_data = open(file_path, 'rb').read()
+#             st.session_state.file_name = file_name
             
-            # Display success message first
-            st.success('Video fetched successfully! Click the download button below.')
+#             # Display success message first
+#             st.success('Video fetched successfully! Click the download button below.')
             
-            # Schedule cleanup for next session
-            if not os.path.exists('cleanup_list.txt'):
-                with open('cleanup_list.txt', 'w') as f:
-                    f.write(file_path + '\n')
-            else:
-                with open('cleanup_list.txt', 'a') as f:
-                    f.write(file_path + '\n')
-        else:
-            st.error('Failed to download the video. File not found.')
-    except Exception as e:
-        st.error(f'Error: {str(e)}')
+#             # Schedule cleanup for next session
+#             if not os.path.exists('cleanup_list.txt'):
+#                 with open('cleanup_list.txt', 'w') as f:
+#                     f.write(file_path + '\n')
+#             else:
+#                 with open('cleanup_list.txt', 'a') as f:
+#                     f.write(file_path + '\n')
+#         else:
+#             st.error('Failed to download the video. File not found.')
+#     except Exception as e:
+#         st.error(f'Error: {str(e)}')
 
 # Display download button if ready
 if st.session_state.get('download_ready'):
