@@ -143,16 +143,16 @@ if st.session_state.streams:
         
         selected_stream = sorted_streams[[f"{s.resolution or s.abr} ({s.mime_type})" for s in sorted_streams].index(selected)]
         
-        if st.button('Download Selected Format'):
+        if st.button('Prepare Selected Format'):
             try:
-                with st.spinner('Downloading...'):
+                with st.spinner('Preparing for download...'):
                     file_path, file_name = download_selected_stream(selected_stream, st.session_state.video_title)
                 
                 if file_path and os.path.exists(file_path):
                     st.session_state.download_ready = True
                     st.session_state.file_data = open(file_path, 'rb').read()
                     st.session_state.file_name = file_name
-                    st.success('Download ready! Click the save button below.')
+                    st.success('Download ready! Click the download button below.')
                     
                     # Schedule cleanup for next session
                     if not os.path.exists('cleanup_list.txt'):
@@ -166,42 +166,11 @@ if st.session_state.streams:
     else:
         st.warning("No streams available in this category")
 
-# Add a download button
-# download_clicked = st.button('Get Video')
-
-# No session state needed for the simplified download process
-
-# Process the URL when entered or button clicked
-# if url and download_clicked:
-#     try:
-#         with st.spinner('Fetching video... This may take a while depending on the video size'):
-#             file_path, file_name = download_video(url)
-            
-#         if file_path and os.path.exists(file_path):
-#             # Store download data in session state
-#             st.session_state.download_ready = True
-#             st.session_state.file_data = open(file_path, 'rb').read()
-#             st.session_state.file_name = file_name
-            
-#             # Display success message first
-#             st.success('Video fetched successfully! Click the download button below.')
-            
-#             # Schedule cleanup for next session
-#             if not os.path.exists('cleanup_list.txt'):
-#                 with open('cleanup_list.txt', 'w') as f:
-#                     f.write(file_path + '\n')
-#             else:
-#                 with open('cleanup_list.txt', 'a') as f:
-#                     f.write(file_path + '\n')
-#         else:
-#             st.error('Failed to download the video. File not found.')
-#     except Exception as e:
-#         st.error(f'Error: {str(e)}')
 
 # Display download button if ready
 if st.session_state.get('download_ready'):
     st.download_button(
-        label='Save Video',
+        label='Click to Download',
         data=st.session_state.file_data,
         file_name=st.session_state.file_name,
         mime='video/mp4',
