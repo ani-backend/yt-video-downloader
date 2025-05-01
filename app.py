@@ -5,6 +5,7 @@ from tkinter import filedialog # <-- Import filedialog
 import os
 import threading
 import json # <-- Import json for saving/loading config
+import subprocess # <-- Import for opening folders
 from commons import (
     get_available_streams,
     download_selected_stream,
@@ -124,7 +125,7 @@ class DownloaderApp:
 
 
     def update_status(self, text, is_error=False):
-        self.status_label.config(text=text, foreground="red" if is_error else "black")
+        self.status_label.config(text=text, foreground="red" if is_error else "white")
 
     def fetch_formats_thread(self):
         url = self.url_entry.get()
@@ -165,6 +166,12 @@ class DownloaderApp:
         ttk.Radiobutton(self.format_frame, text="Progressive (Video+Audio)", variable=self.format_type_var, value='progressive', command=self.update_quality_options).pack(anchor=tk.W)
         ttk.Radiobutton(self.format_frame, text="Video Only", variable=self.format_type_var, value='video', command=self.update_quality_options).pack(anchor=tk.W)
         ttk.Radiobutton(self.format_frame, text="Audio Only", variable=self.format_type_var, value='audio', command=self.update_quality_options).pack(anchor=tk.W)
+        ttk.Radiobutton(self.format_frame, text="After Effects Compatible", variable=self.format_type_var, value='ae_compatible', command=self.update_quality_options).pack(anchor=tk.W)
+
+        # Add a note about After Effects compatibility
+        # ae_note = ttk.Label(self.format_frame, text="Note: 'After Effects Compatible' option filters for formats that work with Adobe After Effects", 
+        #                    font=("", 8, "italic"), foreground="yellow")
+        # ae_note.pack(anchor=tk.W, pady=(0,10))
 
         # Combobox for quality selection
         ttk.Label(self.format_frame, text="Select quality:").pack(anchor=tk.W, pady=(10,0))
@@ -176,9 +183,24 @@ class DownloaderApp:
         self.download_button = ttk.Button(self.format_frame, text="Download Selected Format", command=self.download_selected_thread, state=tk.DISABLED)
         self.download_button.pack(pady=10)
 
+        # Add Open Folder button
+        self.open_folder_button = ttk.Button(self.format_frame, text="Open Download Folder", command=self.open_download_folder)
+        self.open_folder_button.pack(pady=5)
+
         self.format_frame.pack(pady=10) # Show the frame
         self.update_quality_options() # Populate combobox initially
 
+    def open_download_folder(self):
+        """Opens the download folder in file explorer"""
+        if not self.current_download_folder or not os.path.exists(self.current_download_folder):
+            messagebox.showwarning("Folder Error", "Download folder not set or doesn't exist")
+            return
+            
+        try:
+            # For macOS
+            subprocess.run(['open', self.current_download_folder])
+        except Exception as e:
+            messagebox.showerror("Error", f"Could not open folder: {str(e)}")
 
     def update_quality_options(self):
         format_type = self.format_type_var.get()
@@ -204,7 +226,12 @@ class DownloaderApp:
              print(f"Error sorting streams: {e}") # Handle potential sorting errors
              sorted_streams = stream_list # Fallback to unsorted
 
-        self.stream_map = {f"{s.resolution or s.abr} ({s.mime_type})": s for s in sorted_streams}
+        # For After Effects compatibility, add codec info to the display
+        if format_type == 'ae_compatible':
+            self.stream_map = {f"{s.resolution or s.abr} ({s.mime_type} - {s.codecs[0]})": s for s in sorted_streams}
+        else:
+            self.stream_map = {f"{s.resolution or s.abr} ({s.mime_type})": s for s in sorted_streams}
+            
         options = list(self.stream_map.keys())
 
         self.quality_combobox['values'] = options
@@ -221,7 +248,11 @@ class DownloaderApp:
          selected_option = self.quality_combobox.get()
          if selected_option in self.stream_map:
              self.selected_stream = self.stream_map[selected_option]
-             self.download_button.config(state=tk.NORMAL)
+             # Enable download button only if a folder is also selected
+             if self.current_download_folder and os.path.isdir(self.current_download_folder):
+                 self.download_button.config(state=tk.NORMAL)
+             else:
+                 self.download_button.config(state=tk.DISABLED) # Keep disabled if no folder
          else:
              self.selected_stream = None
              self.download_button.config(state=tk.DISABLED)
@@ -237,10 +268,22 @@ class DownloaderApp:
              return
         # --- End Check ---
 
-
-        self.update_status("Downloading...")
+        # --- Disable UI elements ---
+        self.update_status("Downloading... ⏳") # Add an indicator
         self.download_button.config(state=tk.DISABLED)
         self.show_formats_button.config(state=tk.DISABLED)
+        self.url_entry.config(state=tk.DISABLED)
+        self.select_folder_button.config(state=tk.DISABLED)
+        self.quality_combobox.config(state=tk.DISABLED)
+        # Disable radio buttons if they exist
+        try:
+            for widget in self.format_frame.winfo_children():
+                if isinstance(widget, ttk.Radiobutton):
+                    widget.config(state=tk.DISABLED)
+        except tk.TclError: # Handle case where format_frame might not exist yet
+            pass
+        # --- End Disable UI elements ---
+
 
         # Run download in a separate thread, passing the current folder
         thread = threading.Thread(target=self.download_task, args=(self.selected_stream, self.video_title, self.current_download_folder))
@@ -263,9 +306,22 @@ class DownloaderApp:
             self.root.after(0, lambda: messagebox.showerror("Download Error", f"Failed to download: {str(e)}"))
             self.root.after(0, lambda: self.update_status(f"Download failed: {str(e)}", True))
         finally:
-            # Re-enable buttons on the main thread
-            self.root.after(0, lambda: self.download_button.config(state=tk.NORMAL))
-            self.root.after(0, lambda: self.show_formats_button.config(state=tk.NORMAL))
+            # --- Re-enable UI elements on the main thread ---
+            def re_enable_ui():
+                self.download_button.config(state=tk.NORMAL if self.selected_stream else tk.DISABLED) # Re-enable based on selection state
+                self.show_formats_button.config(state=tk.NORMAL)
+                self.url_entry.config(state=tk.NORMAL)
+                self.select_folder_button.config(state=tk.NORMAL)
+                self.quality_combobox.config(state='readonly') # Set back to readonly
+                # Re-enable radio buttons if they exist
+                try:
+                    for widget in self.format_frame.winfo_children():
+                        if isinstance(widget, ttk.Radiobutton):
+                            widget.config(state=tk.NORMAL)
+                except tk.TclError:
+                    pass # Ignore if frame doesn't exist
+            self.root.after(0, re_enable_ui)
+            # --- End Re-enable UI elements ---
 
 
 # --- Main Execution ---

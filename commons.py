@@ -61,16 +61,23 @@ def get_available_streams(url):
     streams = {
         'video': [],
         'audio': [],
-        'progressive': []
+        'progressive': [],
+        'ae_compatible': []  # New category for After Effects compatible streams
     }
     
     for stream in yt.streams:
         if stream.type == 'video' and stream.audio_codec is None:
             streams['video'].append(stream)
+            # Check for After Effects compatible video streams
+            # AE works best with H.264 codec in MP4 container
+            if stream.subtype == 'mp4' and ('avc1' in stream.codecs[0].lower() or 'h264' in stream.codecs[0].lower()):
+                streams['ae_compatible'].append(stream)
         elif stream.type == 'audio':
             streams['audio'].append(stream)
         elif stream.type == 'video' and stream.audio_codec:
             streams['progressive'].append(stream)
+            # Progressive streams are usually compatible with AE
+            streams['ae_compatible'].append(stream)
     
     return streams, yt.title
 
